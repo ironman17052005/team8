@@ -29,7 +29,7 @@ The room command is inside this file because “Include stored routines” was s
 1. Install/start MySQL and connect DataGrip to your own server. Cloning GitHub does not connect you to Clark's database.
 2. Download or pull the latest `team8.sql`. Make a copy for testing.
 3. In that copy, remove the three whole lines containing `SQL_LOG_BIN` and the one whole line containing `GTID_PURGED`. They are server settings, not project tables.
-4. Remove only the text `DEFINER=\`root\`@\`localhost\`` wherever it appears, leaving the rest of each line. This lets the view and procedure belong to your importing account.
+4. Remove only this text wherever it appears: `` DEFINER=`root`@`localhost` ``. Keep the rest of the line. This lets the view and procedure belong to your importing account.
 5. In your MySQL console, create and select a new, empty database:
    ```sql
    CREATE DATABASE team8_review;
