@@ -21,7 +21,22 @@ SET @@SESSION.SQL_LOG_BIN= 0;
 -- GTID state at the beginning of the backup 
 --
 
-SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'ac689852-b9e9-11f1-8178-1306e4654c4c:1-18';
+SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'ac689852-b9e9-11f1-8178-1306e4654c4c:1-29';
+
+--
+-- Table structure for table `author`
+--
+
+DROP TABLE IF EXISTS `author`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `author` (
+  `author_id` int NOT NULL AUTO_INCREMENT,
+  `first_name` varchar(50) NOT NULL,
+  `last_name` varchar(50) NOT NULL,
+  PRIMARY KEY (`author_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `book`
@@ -36,20 +51,27 @@ CREATE TABLE `book` (
   `publisher` varchar(100) DEFAULT NULL,
   `isbn` varchar(13) DEFAULT NULL,
   `publish_year` int DEFAULT NULL,
-  `author_name` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`book_id`),
   UNIQUE KEY `isbn` (`isbn`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `book`
+-- Table structure for table `book_author`
 --
 
-LOCK TABLES `book` WRITE;
-/*!40000 ALTER TABLE `book` DISABLE KEYS */;
-/*!40000 ALTER TABLE `book` ENABLE KEYS */;
-UNLOCK TABLES;
+DROP TABLE IF EXISTS `book_author`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `book_author` (
+  `book_id` int NOT NULL,
+  `author_id` int NOT NULL,
+  PRIMARY KEY (`book_id`,`author_id`),
+  KEY `author_id` (`author_id`),
+  CONSTRAINT `book_author_ibfk_1` FOREIGN KEY (`book_id`) REFERENCES `book` (`book_id`),
+  CONSTRAINT `book_author_ibfk_2` FOREIGN KEY (`author_id`) REFERENCES `author` (`author_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `copies`
@@ -69,17 +91,8 @@ CREATE TABLE `copies` (
   CONSTRAINT `copies_ibfk_1` FOREIGN KEY (`book_id`) REFERENCES `book` (`book_id`),
   CONSTRAINT `copies_ibfk_2` FOREIGN KEY (`media_id`) REFERENCES `media` (`media_id`),
   CONSTRAINT `copies_chk_1` CHECK ((((`book_id` is not null) and (`media_id` is null)) or ((`book_id` is null) and (`media_id` is not null))))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `copies`
---
-
-LOCK TABLES `copies` WRITE;
-/*!40000 ALTER TABLE `copies` DISABLE KEYS */;
-/*!40000 ALTER TABLE `copies` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `fine`
@@ -92,8 +105,6 @@ CREATE TABLE `fine` (
   `fine_id` int NOT NULL AUTO_INCREMENT,
   `loan_id` int NOT NULL,
   `amount` decimal(8,2) NOT NULL,
-  `paid_status` tinyint(1) NOT NULL DEFAULT '0',
-  `paid_date` date DEFAULT NULL,
   PRIMARY KEY (`fine_id`),
   UNIQUE KEY `loan_id` (`loan_id`),
   CONSTRAINT `fine_ibfk_1` FOREIGN KEY (`loan_id`) REFERENCES `loan` (`loan_id`),
@@ -102,13 +113,21 @@ CREATE TABLE `fine` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `fine`
+-- Temporary view structure for view `fine_status`
 --
 
-LOCK TABLES `fine` WRITE;
-/*!40000 ALTER TABLE `fine` DISABLE KEYS */;
-/*!40000 ALTER TABLE `fine` ENABLE KEYS */;
-UNLOCK TABLES;
+DROP TABLE IF EXISTS `fine_status`;
+/*!50001 DROP VIEW IF EXISTS `fine_status`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `fine_status` AS SELECT 
+ 1 AS `fine_id`,
+ 1 AS `loan_id`,
+ 1 AS `amount`,
+ 1 AS `total_paid`,
+ 1 AS `paid_status`,
+ 1 AS `paid_date`*/;
+SET character_set_client = @saved_cs_client;
 
 --
 -- Table structure for table `loan`
@@ -124,24 +143,17 @@ CREATE TABLE `loan` (
   `borrow_date` date NOT NULL,
   `due_date` date NOT NULL,
   `return_date` date DEFAULT NULL,
+  `active_copy_id` int GENERATED ALWAYS AS ((case when (`return_date` is null) then `copy_id` else NULL end)) VIRTUAL,
   PRIMARY KEY (`loan_id`),
+  UNIQUE KEY `one_active_loan_per_copy` (`active_copy_id`),
   KEY `user_id` (`user_id`),
   KEY `copy_id` (`copy_id`),
   CONSTRAINT `loan_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`),
   CONSTRAINT `loan_ibfk_2` FOREIGN KEY (`copy_id`) REFERENCES `copies` (`copy_id`),
   CONSTRAINT `loan_chk_1` CHECK ((`due_date` > `borrow_date`)),
   CONSTRAINT `loan_chk_2` CHECK (((`return_date` is null) or (`return_date` >= `borrow_date`)))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `loan`
---
-
-LOCK TABLES `loan` WRITE;
-/*!40000 ALTER TABLE `loan` DISABLE KEYS */;
-/*!40000 ALTER TABLE `loan` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `media`
@@ -157,15 +169,6 @@ CREATE TABLE `media` (
   PRIMARY KEY (`media_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `media`
---
-
-LOCK TABLES `media` WRITE;
-/*!40000 ALTER TABLE `media` DISABLE KEYS */;
-/*!40000 ALTER TABLE `media` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `payments`
@@ -191,15 +194,6 @@ CREATE TABLE `payments` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `payments`
---
-
-LOCK TABLES `payments` WRITE;
-/*!40000 ALTER TABLE `payments` DISABLE KEYS */;
-/*!40000 ALTER TABLE `payments` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `receipts`
 --
 
@@ -219,15 +213,6 @@ CREATE TABLE `receipts` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `receipts`
---
-
-LOCK TABLES `receipts` WRITE;
-/*!40000 ALTER TABLE `receipts` DISABLE KEYS */;
-/*!40000 ALTER TABLE `receipts` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `room`
 --
 
@@ -243,15 +228,6 @@ CREATE TABLE `room` (
   CONSTRAINT `room_chk_1` CHECK ((`capacity` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `room`
---
-
-LOCK TABLES `room` WRITE;
-/*!40000 ALTER TABLE `room` DISABLE KEYS */;
-/*!40000 ALTER TABLE `room` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `room_reservations`
@@ -276,15 +252,6 @@ CREATE TABLE `room_reservations` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `room_reservations`
---
-
-LOCK TABLES `room_reservations` WRITE;
-/*!40000 ALTER TABLE `room_reservations` DISABLE KEYS */;
-/*!40000 ALTER TABLE `room_reservations` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `staff`
 --
 
@@ -304,15 +271,6 @@ CREATE TABLE `staff` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `staff`
---
-
-LOCK TABLES `staff` WRITE;
-/*!40000 ALTER TABLE `staff` DISABLE KEYS */;
-/*!40000 ALTER TABLE `staff` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `user`
 --
 
@@ -328,17 +286,8 @@ CREATE TABLE `user` (
   `is_faculty` tinyint(1) NOT NULL,
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `user`
---
-
-LOCK TABLES `user` WRITE;
-/*!40000 ALTER TABLE `user` DISABLE KEYS */;
-/*!40000 ALTER TABLE `user` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `waitlist`
@@ -366,13 +315,123 @@ CREATE TABLE `waitlist` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `waitlist`
+-- Dumping routines for database 'TEAM8'
+--
+/*!50003 DROP PROCEDURE IF EXISTS `save_room_reservation` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `save_room_reservation`(
+    IN p_reservation_id INT,
+    IN p_user_id INT,
+    IN p_room_id INT,
+    IN p_start DATETIME,
+    IN p_end DATETIME
+)
+BEGIN
+    DECLARE v_room INT DEFAULT NULL;
+    DECLARE v_existing INT DEFAULT NULL;
+    DECLARE v_conflict INT DEFAULT NULL;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        BEGIN
+            ROLLBACK;
+            RESIGNAL;
+        END;
+
+    IF p_start IS NULL OR p_end IS NULL OR p_end <= p_start THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'End time must be after start time';
+    END IF;
+
+    START TRANSACTION;
+
+    SELECT room_id INTO v_room
+    FROM room
+    WHERE room_id = p_room_id
+        FOR UPDATE;
+
+    IF v_room IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Room does not exist';
+    END IF;
+
+    IF p_reservation_id IS NOT NULL THEN
+        SELECT reservation_id INTO v_existing
+        FROM room_reservations
+        WHERE reservation_id = p_reservation_id
+            FOR UPDATE;
+
+        IF v_existing IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Reservation does not exist';
+        END IF;
+    END IF;
+
+    SELECT reservation_id INTO v_conflict
+    FROM room_reservations
+    WHERE room_id = p_room_id
+      AND start_time < p_end
+      AND end_time > p_start
+      AND (
+        p_reservation_id IS NULL
+            OR reservation_id <> p_reservation_id
+        )
+    LIMIT 1
+    FOR UPDATE;
+
+    IF v_conflict IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Room is already booked during that time';
+    END IF;
+
+    IF p_reservation_id IS NULL THEN
+        INSERT INTO room_reservations (
+            user_id, room_id, start_time, end_time
+        )
+        VALUES (
+                   p_user_id, p_room_id, p_start, p_end
+               );
+    ELSE
+        UPDATE room_reservations
+        SET user_id = p_user_id,
+            room_id = p_room_id,
+            start_time = p_start,
+            end_time = p_end
+        WHERE reservation_id = p_reservation_id;
+    END IF;
+
+    COMMIT;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+
+--
+-- Final view structure for view `fine_status`
 --
 
-LOCK TABLES `waitlist` WRITE;
-/*!40000 ALTER TABLE `waitlist` DISABLE KEYS */;
-/*!40000 ALTER TABLE `waitlist` ENABLE KEYS */;
-UNLOCK TABLES;
+/*!50001 DROP VIEW IF EXISTS `fine_status`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `fine_status` AS select `f`.`fine_id` AS `fine_id`,`f`.`loan_id` AS `loan_id`,`f`.`amount` AS `amount`,coalesce(`p`.`total_paid`,0) AS `total_paid`,(coalesce(`p`.`total_paid`,0) >= `f`.`amount`) AS `paid_status`,(case when (coalesce(`p`.`total_paid`,0) >= `f`.`amount`) then cast(`p`.`last_payment` as date) else NULL end) AS `paid_date` from (`fine` `f` left join (select `payments`.`fine_id` AS `fine_id`,sum(`payments`.`amount_paid`) AS `total_paid`,max(`payments`.`payment_date`) AS `last_payment` from `payments` group by `payments`.`fine_id`) `p` on((`p`.`fine_id` = `f`.`fine_id`))) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
 SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -384,4 +443,4 @@ SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-09-27 15:46:08
+-- Dump completed on 2026-09-28 19:46:35
