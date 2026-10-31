@@ -91,12 +91,20 @@ const server = http.createServer(async (req, res) => {
 
         return;
     }
-    else if (req.method === 'PUT' && url.pathname === '/books') {
+    else if (req.method === 'PUT' && url.pathname.startsWith('/books/')) {
+        const match = url.pathname.match(/^\/books\/(\d+)$/);
+
+        if (!match) {
+            res.writeHead(404, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Book not found.' }));
+            return;
+        }
         try {
             const body = await readJson(req);
             const database = await sql.connect(await getSqlConfig());
+            const book = { ...body, book_id: Number(match[1]) };
 
-            await updateBook(database, body);
+            await updateBook(database, book);
 
             res.writeHead(204);
             res.end();
