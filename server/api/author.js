@@ -18,7 +18,7 @@ export async function listAuthors(database, search = '') {
                         a.first_name,
                         a.last_name
                     FROM author AS a
-                    WHERE a.first_name LIKE N'%' + @search + N'%'
+                    WHERE (a.first_name LIKE N'%' + @search + N'%'
                         OR a.last_name LIKE N'%' + @search + N'%')
                     ORDER BY a.last_name, a.first_name
                 `);
