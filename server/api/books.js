@@ -54,7 +54,7 @@ export async function addBook(database, book) {
         isbn, 
         is_active, 
         author_ids = [], 
-        addCopies
+        addCopies = 1
     } = book;
 
     const authorIds = [...new Set(author_ids.map(Number))];
@@ -63,32 +63,16 @@ export async function addBook(database, book) {
     try {
         await transaction.begin();
 
-        // Verify author(s) exist in the author table
-        const authorCheck = await new sql.Request(transaction)
-            .input('authorIds', sql.VarChar, authorIds.join(','))
-            .query(`
-                SELECT COUNT(*) AS authorCount
-                FROM author
-                WHERE author_id IN (
-                    SELECT TRY_CAST(value AS INT)
-                    FROM STRING_SPLIT(@authorIds, ',')
-                )
-            `);
-        if (authorCheck.recordset[0].authorCount !== authorIds.length) {
-            throw Object.assign(new Error('Choose valid authors.'), { statusCode: 400 });
-        }
-
         // Add the book in the book table
         const result = await new sql.Request(transaction)
             .input('title', sql.NVarChar(150), title.trim())
             .input('publisher', sql.NVarChar(100), publisher)
             .input('isbn', sql.NVarChar(13), isbn || NULL)
-            .input('publish_year', sql.Int, 2026)
             .input('is_active', sql.Bit, is_active)
             .query(`
-                INSERT INTO book (title, publisher, isbn, publish_year, is_active)
+                INSERT INTO book (title, publisher, isbn, is_active)
                 OUTPUT INSERTED.book_id AS book_id
-                VALUES (@title, @publisher, @isbn, @publish_year, @is_active)
+                VALUES (@title, @publisher, @isbn, @is_active)
             `);
 
         const bookId = result.recordset[0].book_id;
@@ -108,10 +92,11 @@ export async function addBook(database, book) {
         for (let i = 0; i < addCopies; i++) {
             await new sql.Request(transaction)
                 .input('book_id', sql.Int, bookId)
+                .input('is_available', sql.Bit, true)
                 .input('is_active', sql.Bit, is_active)
                 .query(`
                     INSERT INTO copies (book_id, is_available, is_active)
-                    VALUES (@book_id, 'true', @is_active)
+                    VALUES (@book_id, @is_available, @is_active)
                 `);
         }
         
@@ -124,22 +109,46 @@ export async function addBook(database, book) {
         
         console.error('Error adding book:', error);
 
-        if (error.number === 2601 || error.number === 2627) {
-            throw Object.assign(
-                new Error('Another book already has that ISBN.'),
-                { statusCode: 409 }
-            );
-        }
-
         throw error;
     }
 }
 
 export async function updateBook(database, book) {
-    const { book_id, title, publisher, isbn, is_active } = book;
+    const { 
+        book_id,
+        title, 
+        publisher, 
+        isbn, 
+        is_active, 
+        author_ids = [], 
+        addCopies
+    } = book;
+
+    const authorIds = [...new Set(author_ids.map(Number))];
+    const transaction = new sql.Transaction(database);
+
+    
     try {
-        const result = await database.poolconnection
-        .request()
+        await transaction.begin();
+
+        // Check if book with the same ISBN already exists
+        const sameBook = await new sql.Request(transaction)
+            .input('isbn', sql.NVarChar, isbn)
+            .input('book_id', sql.Int, book_id)
+            .query(`
+                SELECT TOP 1 book_id
+                FROM book
+                WHERE isbn = @isbn
+                    AND book_id <> @book_id
+            `);
+
+            if (sameBook.recordset.length > 0) {
+                throw Object.assign(new Error('A book with that ISBN already exists.'), 
+                { statusCode: 409 }
+            );
+        }
+
+        const result = await new sql.Request(transaction)
         .input('book_id', sql.Int, book_id)
         .input('title', sql.NVarChar(150), title)
         .input('publisher', sql.NVarChar(100), publisher)
@@ -153,8 +162,72 @@ export async function updateBook(database, book) {
                 is_active = @is_active
             WHERE book_id = @book_id
         `);
-        return result;
+
+        // Check if book id exists
+        if (result.rowsAffected[0] === 0) {
+            throw Object.assign(new Error("Book not found."), 
+            { statusCode: 404 }
+            );
+        }
+
+        // Check if authors have changed and update book_authors if needed
+        const authorResults = await new sql.Request(transaction)
+            .input('book_id', sql.Int, book_id)
+            .query(`
+                SELECT author_id
+                FROM book_author
+                WHERE book_id = @book_id
+            `);
+        
+        const currAuthorIds = authorResults.recordset
+                .map(row => Number(row.author_id))
+                .sort((a, b) => a - b);
+            
+        const selectAuthorIds = [...authorIds].sort((a, b) => a - b);
+
+        const authorsChanged = 
+            currAuthorIds.length !== selectAuthorIds.length ||
+            currAuthorIds.some((id, index) => id !== selectAuthorIds[index]);
+
+        if (authorsChanged) {
+            await new sql.Request(transaction)
+                .input('book_id', sql.Int, book_id)
+                .query(`
+                    DELETE FROM book_author
+                    WHERE book_id = @book_id
+                `);
+
+            for (const authorId of authorIds) {
+                await new sql.Request(transaction)
+                    .input('book_id', sql.Int, book_id)
+                    .input('author_id', sql.Int, authorId)
+                    .query(`
+                        INSERT INTO book_author (book_id, author_id)
+                        VALUES (@book_id, @author_id)
+                    `);
+            }
+        }
+        
+        // Add copies if needed
+        if (addCopies > 0) {
+            for (let i = 0; i < addCopies; i++) {
+                await new sql.Request(transaction)
+                    .input('book_id', sql.Int, book_id)
+                    .input('is_available', sql.Bit, true)
+                    .input('is_active', sql.Bit, is_active)
+                    .query(`
+                        INSERT INTO copies (book_id, is_available, is_active)
+                        VALUES (@book_id, @is_available, @is_active)
+                    `);
+            }
+        }
+
+        await transaction.commit();
     } catch (error) {
+        try {
+            await transaction.rollback()
+        } catch {}
+
         console.error('Error updating book:', error);
         throw error;
     }

@@ -1,7 +1,7 @@
 import http from 'http';
 import sql from 'mssql';
 import { getSqlConfig } from './config.js';
-import { listBooks, addBook, deleteBook } from './api/books.js';
+import { listBooks, addBook, deleteBook, updateBook } from './api/books.js';
 import { listAuthors } from './api/author.js';
 import { listLoans } from './api/loans.js';
 import { listMedia, addMedia, deleteMedia} from './api/media.js';
@@ -40,7 +40,7 @@ const server = http.createServer(async (req, res) => {
         baseUrl = origin;
     }
     
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
@@ -91,7 +91,25 @@ const server = http.createServer(async (req, res) => {
 
         return;
     }
-    else if (req.method === 'DELETE' && url.pathname.startsWith('/books')) {
+    else if (req.method === 'PUT' && url.pathname === '/books') {
+        try {
+            const body = await readJson(req);
+            const database = await sql.connect(await getSqlConfig());
+
+            await updateBook(database, body);
+
+            res.writeHead(204);
+            res.end();
+        } catch (error) {
+            console.error('Error updating book', error);
+
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'content-type': 'application/json'});
+            res.end(JSON.stringify({
+                error: status < 500 ? error.message : 'An error occurred while updating this book.'
+            }));
+        }
+
         return;
     }
 
