@@ -237,10 +237,9 @@ GROUP BY mi.title, mi.media_type`;
 
 type Params = Record<string, string>;
 
-// These run on the server against Azure SQL. The others still use the demo data.
 const SERVER_URL = 'https://umas-library-server.vercel.app';
-const SERVER_QUERIES = new Set(['member-items', 'overdue', 'availability']);
-const SERVER_REPORTS = new Set(['popular', 'fines', 'activity']);
+const SERVER_QUERIES = new Set(['member-items', 'overdue', 'availability', 'hold-queue']);
+const SERVER_REPORTS = new Set(['popular', 'history', 'authors', 'fines', 'activity', 'inventory']);
 
 async function fromServer<T>(path: string): Promise<T> {
   const response = await fetch(`${SERVER_URL}${path}`);

@@ -124,6 +124,34 @@ export async function runQuery(database, id, params) {
         return toTable(result.recordset);
     }
 
+    if (id === 'hold-queue') {
+        const [kind, rawId] = String(params.item || '').split(':');
+        const itemId = Number(rawId);
+        if ((kind !== 'book' && kind !== 'media') || !Number.isInteger(itemId)) {
+            throw badRequest('Choose a book or media item.');
+        }
+
+        const result = await database
+            .request()
+            .input('book_id', sql.Int, kind === 'book' ? itemId : null)
+            .input('media_id', sql.Int, kind === 'media' ? itemId : null)
+            .query(`
+                SELECT ROW_NUMBER() OVER (ORDER BY w.request_time, w.waitlist_id) AS [Position],
+                       u.first_name + N' ' + u.last_name AS [Member],
+                       CONVERT(char(10), w.request_time, 23) AS [Requested],
+                       w.status AS [Status],
+                       N'-' AS [Pick up by]
+                FROM waitlist AS w
+                JOIN [user] AS u ON u.user_id = w.user_id
+                WHERE w.status = 'waiting'
+                  AND ((@book_id IS NOT NULL AND w.book_id = @book_id)
+                    OR (@media_id IS NOT NULL AND w.media_id = @media_id))
+                ORDER BY w.request_time, w.waitlist_id
+            `);
+
+        return toTable(result.recordset);
+    }
+
     throw badRequest('Unknown query.');
 }
 
@@ -300,6 +328,114 @@ export async function runReport(database, id, params) {
                 title: 'Total loans by role',
                 labels: rows.map((r) => r['Role']),
                 values: rows.map((r) => r['Total loans']),
+            },
+        };
+    }
+
+    if (id === 'history') {
+        const result = await withFilters(database.request(), f)
+            .query(`
+                SELECT l.loan_id AS [Loan #],
+                       u.first_name + N' ' + u.last_name AS [Member],
+                       COALESCE(b.title, m.title) AS [Title],
+                       b.isbn AS [ISBN],
+                       CONVERT(char(10), l.borrow_date, 23) AS [Borrowed],
+                       CONVERT(char(10), l.due_date, 23) AS [Due],
+                       CONVERT(char(10), l.return_date, 23) AS [Returned],
+                       CASE WHEN l.return_date IS NULL AND l.due_date < CAST(GETDATE() AS date) THEN N'Overdue'
+                            WHEN l.return_date IS NULL THEN N'On loan'
+                            WHEN l.return_date > l.due_date THEN N'Returned late'
+                            ELSE N'Returned on time' END AS [Outcome],
+                       fn.amount AS [Fine]
+                FROM loan AS l
+                JOIN [user] AS u ON u.user_id = l.user_id
+                JOIN copies AS c ON c.copy_id = l.copy_id
+                LEFT JOIN book AS b ON b.book_id = c.book_id
+                LEFT JOIN media AS m ON m.media_id = c.media_id
+                LEFT JOIN fine AS fn ON fn.loan_id = l.loan_id
+                WHERE l.borrow_date BETWEEN CAST(@from AS date) AND CAST(@to AS date)` + MEMBER_FILTERS + ITEM_FILTERS + `
+                ORDER BY l.borrow_date DESC, l.loan_id DESC
+            `);
+
+        const table = toTable(result.recordset);
+        const rows = result.recordset;
+        const late = rows.filter((r) => r['Outcome'] === 'Overdue' || r['Outcome'] === 'Returned late').length;
+        return {
+            ...table,
+            stats: [
+                { label: 'Loans', value: String(rows.length) },
+                { label: 'Late or overdue', value: String(late) },
+                { label: 'Fines from these loans', value: money(rows.reduce((sum, r) => sum + Number(r['Fine'] || 0), 0)) },
+            ],
+        };
+    }
+
+    if (id === 'authors') {
+        const result = await withFilters(database.request(), { ...f, kind: 'book', authorId: null })
+            .query(`
+                SELECT a.first_name + N' ' + a.last_name AS [Author],
+                       COUNT(*) AS [Loans],
+                       COUNT(DISTINCT b.book_id) AS [Titles borrowed]
+                FROM loan AS l
+                JOIN [user] AS u ON u.user_id = l.user_id
+                JOIN copies AS c ON c.copy_id = l.copy_id
+                JOIN book AS b ON b.book_id = c.book_id
+                LEFT JOIN media AS m ON m.media_id = c.media_id
+                JOIN book_author AS ba ON ba.book_id = b.book_id
+                JOIN author AS a ON a.author_id = ba.author_id
+                WHERE l.borrow_date BETWEEN CAST(@from AS date) AND CAST(@to AS date)` + MEMBER_FILTERS + ITEM_FILTERS + `
+                GROUP BY a.author_id, a.first_name, a.last_name
+                ORDER BY [Loans] DESC, [Author]
+            `);
+
+        const table = toTable(result.recordset);
+        const rows = result.recordset;
+        const top = rows.slice(0, 10);
+        return {
+            ...table,
+            stats: [
+                { label: 'Authors borrowed', value: String(rows.length) },
+                { label: 'Most borrowed author', value: rows.length ? rows[0]['Author'] : '-' },
+            ],
+            chart: {
+                title: 'Loans per author',
+                labels: top.map((r) => r['Author']),
+                values: top.map((r) => r['Loans']),
+            },
+        };
+    }
+
+    if (id === 'inventory') {
+        const result = await withFilters(database.request(), f)
+            .query(`
+                SELECT COALESCE(b.title, m.title) AS [Title],
+                       CASE WHEN c.book_id IS NOT NULL THEN N'Book' ELSE m.media_type END AS [Type],
+                       COUNT(*) AS [Total copies],
+                       SUM(CASE WHEN c.is_available = 1 THEN 1 ELSE 0 END) AS [Available],
+                       SUM(CASE WHEN c.is_available = 0 THEN 1 ELSE 0 END) AS [On loan]
+                FROM copies AS c
+                LEFT JOIN book AS b ON b.book_id = c.book_id
+                LEFT JOIN media AS m ON m.media_id = c.media_id
+                WHERE c.is_active = 1
+                  AND COALESCE(b.is_active, m.is_active) = 1` + ITEM_FILTERS + `
+                GROUP BY COALESCE(b.title, m.title), CASE WHEN c.book_id IS NOT NULL THEN N'Book' ELSE m.media_type END
+                ORDER BY [Title]
+            `);
+
+        const table = toTable(result.recordset);
+        const rows = result.recordset;
+        const total = rows.reduce((sum, r) => sum + r['Total copies'], 0);
+        const available = rows.reduce((sum, r) => sum + r['Available'], 0);
+        return {
+            ...table,
+            stats: [
+                { label: 'Total copies', value: String(total) },
+                { label: 'On the shelf', value: total ? `${Math.round((available / total) * 100)}%` : '0%' },
+            ],
+            chart: {
+                title: 'Copies available per title',
+                labels: rows.map((r) => r['Title']),
+                values: rows.map((r) => r['Available']),
             },
         };
     }
