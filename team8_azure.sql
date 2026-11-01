@@ -72,7 +72,7 @@ CREATE TABLE dbo.[book] (
 CREATE TABLE dbo.[media] (
     [media_id] int IDENTITY(1,1) NOT NULL,
     [title] nvarchar(150) NOT NULL,
-    [is_dvd] bit NOT NULL,
+    [media_type] varchar(10) NOT NULL,
     [is_active] bit NOT NULL DEFAULT 1,
     PRIMARY KEY ([media_id])
 );
@@ -82,6 +82,7 @@ CREATE TABLE dbo.[room] (
     [room_number] nvarchar(10) NOT NULL,
     [capacity] int NOT NULL,
     [is_active] bit NOT NULL DEFAULT 1,
+    [room_level] int NULL DEFAULT 1,
     PRIMARY KEY ([room_id]),
     CONSTRAINT [uq_room_room_number] UNIQUE ([room_number]),
     CONSTRAINT [room_chk_1] CHECK (([capacity] > 0))

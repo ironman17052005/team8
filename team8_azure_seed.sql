@@ -80,11 +80,11 @@ INSERT INTO dbo.[book_author] ([book_id], [author_id]) VALUES
     (6, 13), (7, 14), (8, 15), (9, 16), (10, 17);
 
 SET IDENTITY_INSERT dbo.[media] ON;
-INSERT INTO dbo.[media] ([media_id], [title], [is_dvd]) VALUES
-    (1, N'Cosmos: A Spacetime Odyssey',                1),
-    (2, N'Planet Earth II',                            1),
-    (3, N'The Feynman Lectures on Physics (Audio CD)', 0),
-    (4, N'Learn Spanish: Level 1 (Audio CD)',          0);
+INSERT INTO dbo.[media] ([media_id], [title], [media_type]) VALUES
+    (1, N'Cosmos: A Spacetime Odyssey',                'DVD'),
+    (2, N'Planet Earth II',                            'DVD'),
+    (3, N'The Feynman Lectures on Physics (Audio CD)', 'Audiobook'),
+    (4, N'Learn Spanish: Level 1 (Audio CD)',          'Audiobook');
 SET IDENTITY_INSERT dbo.[media] OFF;
 
 SET IDENTITY_INSERT dbo.[copies] ON;
@@ -106,11 +106,11 @@ INSERT INTO dbo.[copies] ([copy_id], [book_id], [media_id], [is_active]) VALUES
 SET IDENTITY_INSERT dbo.[copies] OFF;
 
 SET IDENTITY_INSERT dbo.[room] ON;
-INSERT INTO dbo.[room] ([room_id], [room_number], [capacity], [is_active]) VALUES
-    (1, N'101', 4, 1),
-    (2, N'102', 6, 1),
-    (3, N'201', 8, 1),
-    (4, N'202', 2, 0);
+INSERT INTO dbo.[room] ([room_id], [room_number], [capacity], [is_active], [room_level]) VALUES
+    (1, N'101', 4, 1, 1),
+    (2, N'102', 6, 1, 2),
+    (3, N'201', 8, 1, 2),
+    (4, N'202', 2, 0, 2);
 SET IDENTITY_INSERT dbo.[room] OFF;
 
 SET IDENTITY_INSERT dbo.[loan] ON;
